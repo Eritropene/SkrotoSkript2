@@ -11,13 +11,12 @@ HashMap *func_map;
 Variable stack[STACK_SIZE];
 int sp = 0;
 
-const char NEWLINE[2] = "\n";
-const char SPACE[2] = " ";
+Variable EMPTY;
 
 Variable getoperand(Code*, int*, char);
 Variable operation(Code*, int*, char);
 Variable run(Code);
-Code readfunction(const char*);
+Code readfunction(char*);
 
 void error(Code *cd, int errorFlag, int line) {
     printf("\nERROR %d: ", errorFlag);
@@ -75,7 +74,7 @@ void error(Code *cd, int errorFlag, int line) {
             printf("Type mismatch in declaration.               %.7s [line %d]", c, line);
             break;
     }
-    printf("\n% *c                                                     ^", spacing, ' ');
+    printf("\n%*s                                                     ^", spacing, "");
     putchar('\a');
     exit(errorFlag);
 }
@@ -85,10 +84,10 @@ void initvar(Variable *var)
     memset(var, 0, sizeof(Variable) * 26);
     // 'n' is default newline char
     var[13].type = vstring;
-    var[13].s = NEWLINE;
+    var[13].s = "\n";
     // 's' is default space char
     var[18].type = vstring;
-    var[18].s = SPACE;
+    var[18].s = " ";
 }
 void initfunc(Code *func)
 {
@@ -115,7 +114,7 @@ char* readstr(Code *cd, int *ip)
     readbuffer[rp] = '\0';
     return readbuffer;
 }
-
+/* push var to stack */
 void push(Variable x)
 {
     if (sp >= STACK_SIZE) {
@@ -123,6 +122,7 @@ void push(Variable x)
     }
     stack[sp++] = x;
 }
+/* pop var from stack */
 void pop(Variable *x)
 {
     if (sp <= 0) {
@@ -285,7 +285,7 @@ Variable eql(Code *cd, int *ip, Variable a, Variable b) {
             ret.b = (a.f == b.f) ? true : false;
             break;
         case vbool:
-            ret.b == (a.b == b.b) ? true : false;
+            ret.b = (a.b == b.b) ? true : false;
             break;
         default:
             error(cd, 4, (*ip)-1);
@@ -306,8 +306,7 @@ Variable getoperand(Code *cd, int *ip, char x) {
     else 
     {
         error(cd, 2, (*ip)-1);
-        Variable a;
-        return a;
+        return EMPTY;
     }
 }
 
@@ -316,15 +315,15 @@ Variable operation(Code *cd, int *ip, char c) {
     int p = *ip;
     char next = cd->body[(*ip)++];
 
-    Variable ret;
-    ret.type = vnull;
+    Variable ret = EMPTY;
+
     /* call */
     if (c == 'C') {
         if (islower(next) == 0) {
             error(cd, 2, p+1);
         }
         Code f = cd->funcs[next - 'a'];
-        return (f.length == 0) ? ret : (Variable)run(f);
+        return (f.length == 0) ? ret : run(f);
     }
 
     Variable a = getoperand(cd, ip, next);
@@ -371,7 +370,7 @@ Variable operation(Code *cd, int *ip, char c) {
     }
     return ret;
 }
-
+/* print variable to console */
 void print(Variable v)
 {
     switch (v.type) {
@@ -392,6 +391,7 @@ void print(Variable v)
             break;
     }
 }
+/* input */
 void input(Code *cd, int *ip, Variable* x) {
     switch (x->type) {
         case vint:
@@ -408,7 +408,7 @@ void input(Code *cd, int *ip, Variable* x) {
     }
     fflush(stdin);
 }
-
+/* execute a code ,, retur nthe result */
 Variable run(Code cd)
 {
     int ip = 0;
@@ -417,8 +417,7 @@ Variable run(Code cd)
     // functions
     Code func[26];
 
-    Variable returnValue;
-    returnValue.type = vnull;
+    Variable returnValue = EMPTY;
 
     initvar(var);
     initfunc(func);
@@ -479,10 +478,20 @@ Variable run(Code cd)
                     var[x - 'a'].type = vfloat;
                 } else {
                     Variable v = getoperand(&cd, &ip, c);
-                    if (vfloat != v.type) {
-                        error(&cd, 7, ip-1);
+                    var[x - 'a'].type = vfloat;
+                    switch (v.type) {
+                        case vint:
+                            var[x - 'a'].f = (float)v.i;
+                            break;
+                        case vfloat:
+                            var[x - 'a'].f = (int)v.f;
+                            break;
+                        case vstring:
+                            var[x - 'a'].f = atof(v.s);
+                            break;
+                        default:
+                            error(&cd, 7, ip-1);
                     }
-                    var[x - 'a'] = v;
                 }
                 break;
 
@@ -525,10 +534,17 @@ Variable run(Code cd)
                     var[x - 'a'].type = vbool;
                 } else {
                     Variable v = getoperand(&cd, &ip, c);
-                    if (vint != v.type) {
-                        error(&cd, 7, ip-1);
+                    var[x - 'a'].type = vbool;
+                    switch (v.type) {
+                        case vint:
+                            var[x - 'a'].b = v.i == 0 ? false : true;
+                            break;
+                        case vbool:
+                            var[x - 'a'].b = v.b;
+                            break;
+                        default:
+                            error(&cd, 7, ip-1);
                     }
-                    var[x - 'a'] = v;
                 }
                 break;
             
@@ -655,7 +671,7 @@ void readfile(FILE* file, int count, char* buffer) {
     }
     buffer[n] = '\0';
 }
-Code readfunction(const char* skr_file)
+Code readfunction(char* skr_file)
 {
     Code* code = search(func_map, skr_file);
     if (code == NULL) {
@@ -695,6 +711,8 @@ int main(int argc, char** args) {
     if (argc < 2) {
         error(NULL, -1, 0);
     }
+
+    EMPTY.type = vnull;
 
     func_map = create_hashmap();
 
