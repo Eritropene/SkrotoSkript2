@@ -10,6 +10,7 @@ HashMap *func_map;
 
 Variable stack[STACK_SIZE];
 int sp = 0;
+Variable heap[HEAP_SIZE];
 
 Variable EMPTY;
 
@@ -51,6 +52,9 @@ void error(Code *cd, int errorFlag, int line) {
             break;
         case -4:
             printf("Stack underflow. (Are you missing some parameters?)");
+            break;
+        case -5:
+            printf("Heap index outside heap boundaries.         %.7s [line %d]", c, line);
             break;
         case 1:
             printf("Variable not initialized.                   %.7s [line %d]", c, line);
@@ -97,6 +101,10 @@ void initjumps(int *j)
 {
     memset(j, -1, sizeof(int) * 26);
 }
+void initheap()
+{
+    memset(heap, 0, sizeof(Variable) * HEAP_SIZE);
+}
 
 /* read a string from the code */
 char readbuffer[MAX_STR_LEN+1];
@@ -129,6 +137,28 @@ void pop(Variable *x)
         error(NULL, -4, 0);
     }
     *x = stack[--sp];
+}
+/* get from heap */
+Variable hget(Code *cd, int *ip, Variable pos) 
+{
+    if (pos.type != vint) {
+        error(cd, 4, (*ip)-1);
+    }
+    if (pos.i < 0 || pos.i >= HEAP_SIZE) {
+        error(cd, -5, (*ip)-1);
+    }
+    return heap[pos.i];
+}
+/* write in heap */
+void hset(Code *cd, int *ip, Variable pos, Variable value) 
+{
+    if (pos.type != vint) {
+        error(cd, 4, (*ip)-1);
+    }
+    if (pos.i < 0 || pos.i >= HEAP_SIZE) {
+        error(cd, -5, (*ip)-1);
+    }
+    heap[pos.i] = value;
 }
 
 /* sum of two variables */
@@ -199,20 +229,20 @@ Variable divv(Code *cd, int *ip, Variable a, Variable b) {
     }
     return ret;
 }
-/* module of two variables */
-Variable mod(Code *cd, int *ip, Variable a, Variable b) {
-    if (a.type != b.type) error(cd, 3, (*ip)-1);
-    Variable ret;
-    ret.type = a.type;
-    switch (a.type) {
-        case vint:
-            ret.i = a.i % b.i;
-            break;
-        default:
-            error(cd, 4, (*ip)-1);
-    }
-    return ret;
-}
+// /* module of two variables */
+// Variable mod(Code *cd, int *ip, Variable a, Variable b) {
+//     if (a.type != b.type) error(cd, 3, (*ip)-1);
+//     Variable ret;
+//     ret.type = a.type;
+//     switch (a.type) {
+//         case vint:
+//             ret.i = a.i % b.i;
+//             break;
+//         default:
+//             error(cd, 4, (*ip)-1);
+//     }
+//     return ret;
+// }
 
 /* logic and between two boolean variables */
 Variable and(Code *cd, int *ip, Variable a, Variable b) {
@@ -329,6 +359,8 @@ Variable operation(Code *cd, int *ip, char c) {
     Variable a = getoperand(cd, ip, next);
     if (c == 'K') {
         return not(cd, ip, a);
+    } else if (c == 'H') {
+        return hget(cd, ip, a);
     }
 
     next = cd->body[(*ip)++];
@@ -346,9 +378,9 @@ Variable operation(Code *cd, int *ip, char c) {
         case 'D':
             return divv(cd, ip, a, b);
             break;
-        case 'H':
-            return mod(cd, ip, a, b);
-            break;
+        // case 'H':
+        //     return mod(cd, ip, a, b);
+        //     break;
         case 'T':
             return and(cd, ip, a, b);
             break;
@@ -549,10 +581,10 @@ Variable run(Code cd)
                 break;
             
             case 'Q':
-                ip++;
+                ip++; // labeling already done. skip
                 break;
 
-            /*jump*/
+            /* jump */
             case 'J':
                 // look ahead
                 c = cd.body[ip++];
@@ -564,13 +596,13 @@ Variable run(Code cd)
                 } else {
                     error(&cd, 2, ip-1);
                 }
-                if (jumpPosition >= cd.length) {
+                if (jumpPosition > cd.length) {
                     error(&cd, 5, jumpPosition);
                 }
                 ip = jumpPosition;
                 break;
 
-            /*conditional-jump*/
+            /* conditional-jump */
             case 'X':
                 // get the Variable
                 x = cd.body[ip++];
@@ -588,7 +620,7 @@ Variable run(Code cd)
                     error(&cd, 2, ip-1);
                 }
 
-                if (jumpPosition >= cd.length) {
+                if (jumpPosition > cd.length) {
                     error(&cd, 5, jumpPosition);
                 }
                 // condition
@@ -647,6 +679,29 @@ Variable run(Code cd)
                 } else {
                     error(&cd, 2, ip-1);
                 }
+                break;
+
+            /* heap set */
+            case 'U':
+                // get the Position
+                x = cd.body[ip++];
+                Variable pos;
+                if (x == '"') {
+                    pos.i = atoi(readstr(&cd, &ip));
+                    pos.type = vint;
+                } else {
+                    pos = getoperand(&cd, &ip, x); 
+                    if (pos.type != vint) {
+                        error(&cd, 3, ip-1);
+                    }
+                }
+                
+                // get the Value
+                c = cd.body[ip++];
+                Variable value = getoperand(&cd, &ip, c);
+
+                // write
+                hset(&cd, &ip, pos, value);
                 break;
 
             /* return */
@@ -713,6 +768,7 @@ int main(int argc, char** args) {
     }
 
     EMPTY.type = vnull;
+    initheap();
 
     func_map = create_hashmap();
 

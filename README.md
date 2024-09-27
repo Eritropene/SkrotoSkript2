@@ -31,7 +31,7 @@ The operations are the following:
 |E| Equals (==) | Exy, EXY
 |F| Float declaration | Fx"3.4", Fxy, FxY
 |G| Greater than (>)
-|H| Modulus (%)
+|H| Get the Nth variable in heap | Hx, HY
 |I| Int declaration
 |J| Jump (with index or with variable!)
 |K| Logic Not (!)
@@ -44,7 +44,7 @@ The operations are the following:
 |R| Return
 |S| String declaration
 |T| Logic And (&&)
-|U| ...nothing?
+|U| Write the Nth variable in heap | Uxy, UXY, UXy, UxY
 |V| Logic Or (\|\|)
 |W| Import function
 |X| Conditional Jump (with index or with variable!)
@@ -76,3 +76,5 @@ Recap, How to call a function:
 4. To read the parameter from the stack, pop them out with `Y`.
 
 YOU HAVE A STACK, AND YES YOU CAN USE IT. Be grateful.
+
+YOU ALSO HAVE AN HEAP. Feel free to use as an array.

@@ -1,7 +1,8 @@
 #ifndef SKROTOSKRIPT2_H
 #define SKROTOSKRIPT2_H
 
-#define STACK_SIZE 64
+#define STACK_SIZE 256
+#define HEAP_SIZE 256
 #define MAX_STR_LEN 256
 
 typedef enum { false, true } bool;
