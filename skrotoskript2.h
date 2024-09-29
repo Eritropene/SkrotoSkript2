@@ -27,4 +27,11 @@ typedef struct C {
     int *jumps;
 } Code;
 
+bool has_only_one_operand(char c) 
+{
+    //                     a,    b,    c,   d,    e,    f,    g,    h,    i,    j,   k,   l,    m,    n,   o,   p,   q,   r,   s,    t,    u,    v,    w,    x,    y,   z
+    bool lookup_table[] = {false,false,true,false,false,false,false,false,false,true,true,false,false,true,true,true,true,true,false,false,false,false,false,false,true,false};
+    return lookup_table[c - 'A'];
+}
+
 #endif
