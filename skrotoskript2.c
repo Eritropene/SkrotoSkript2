@@ -323,6 +323,54 @@ Variable eql(Code *cd, int *ip, Variable a, Variable b) {
     return ret;
 }
 
+/* read from code a string variable (" ") */
+Variable getstr_unchecked(Code *cd, int *ip)
+{
+    Variable v;
+    v.type = vstring;
+    *ip = *ip + 1;
+    v.s = readstr(cd, ip);
+    char *str = malloc((strlen(v.s) + 1)*sizeof(char));
+    strcpy(str, v.s);
+    v.s = str;
+    return v;
+}
+Variable getstr(Code *cd, int *ip)
+{
+    char c = cd->body[*ip];
+    if (c != '"') {
+        error(cd, 3, *ip);
+    }
+    return getstr_unchecked(cd, ip);
+}
+
+/* read from code a variable */
+Variable getvar_unchecked(Code *cd, int *ip)
+{
+    char c = cd->body[(*ip)++];
+    return cd->vars[c - 'a'];
+}
+Variable getvar(Code *cd, int *ip)
+{
+    char c = cd->body[*ip];
+    if (islower(c) == 0) {
+        error(cd, 3, *ip);
+    }
+    return getvar_unchecked(cd, ip);
+}
+Variable getoperation_unchecked(Code *cd, int *ip)
+{
+
+}
+Variable getoperation(Code *cd, int *ip)
+{
+    char c = cd->body[*ip];
+    if (isupper(c) == 0) {
+        error(cd, 3, *ip);
+    }
+    return getoperation_unchecked(cd, ip);
+}
+
 /* return a variable or the result of an operation */
 Variable getoperand(Code *cd, int *ip, char x) {
     if (islower(x)) 
