@@ -363,7 +363,7 @@ Variable getstr(Code *cd, int *ip)
 /* get constant from code */
 Variable getconst_unchecked(Code *cd, int *ip)
 {
-    Constant *temp = cd->curr_const->next;
+    Constant *temp = cd->curr_const;
     if (temp->pos == *ip) { // const found
         *ip = temp->resumePoint;
         return temp->content;
@@ -589,7 +589,8 @@ Variable run(Code cd)
                 c = cd.body[ip++];
                 if (c == '"') {
                     ip--;
-                    var[x - 'a'] = getconst_unchecked(&cd, &ip);
+                    var[x - 'a'].s = getconst_unchecked(&cd, &ip).s;
+                    var[x - 'a'].type = vstring;
                 } else {
                     Variable v = getoperand(&cd, &ip, c);
                     if (vstring != v.type) {
