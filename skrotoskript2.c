@@ -339,6 +339,55 @@ Variable getoperand(Code *cd, int *ip, char x) {
         return EMPTY;
     }
 }
+/* read from code a string variable (" ") */
+Variable getstr_unchecked(Code *cd, int *ip)
+{
+    Variable v;
+    v.type = vstring;
+    *ip = *ip + 1;
+    v.s = readstr(cd, ip);
+    char *str = malloc((strlen(v.s) + 1)*sizeof(char));
+    strcpy(str, v.s);
+    v.s = str;
+    return v;
+}
+Variable getstr(Code *cd, int *ip)
+{
+    char c = cd->body[*ip];
+    if (c != '"') {
+        error(cd, 3, *ip);
+    }
+    return getstr_unchecked(cd, ip);
+}
+
+/* get constant from code */
+Variable getconst_unchecked(Code *cd, int *ip)
+{
+    Constant *temp = cd->curr_const->next;
+    if (temp->pos == *ip) { // const found
+        *ip = temp->resumePoint;
+        return temp->content;
+    }
+    // not found in current, iterate from start
+    temp = cd->const_list;
+    while (temp != NULL) {
+        if (temp->pos == *ip) { // const found
+            *ip = temp->resumePoint;
+            cd->curr_const = temp;
+            return temp->content;
+        }
+        temp = temp->next;
+    }
+    return EMPTY;
+}
+Variable getconst(Code *cd, int *ip)
+{
+    char c = cd->body[*ip];
+    if (c != '"') {
+        error(cd, 3, *ip);
+    }
+    return getconst_unchecked(cd, ip);
+}
 
 /* return the result of an operation */
 Variable operation(Code *cd, int *ip, char c) {
@@ -472,7 +521,8 @@ Variable run(Code cd)
                 // look ahead
                 c = cd.body[ip++];
                 if (c == '"') {
-                    var[x - 'a'].i = atoi(readstr(&cd, &ip));
+                    ip--;
+                    var[x - 'a'].i = atoi(getconst_unchecked(&cd, &ip).s);
                     var[x - 'a'].type = vint;
                 } else {
                     Variable v = getoperand(&cd, &ip, c);
@@ -506,7 +556,8 @@ Variable run(Code cd)
                 // look ahead
                 c = cd.body[ip++];
                 if (c == '"') {
-                    var[x - 'a'].f = atof(readstr(&cd, &ip));
+                    ip--;
+                    var[x - 'a'].f = atof(getconst_unchecked(&cd, &ip).s);
                     var[x - 'a'].type = vfloat;
                 } else {
                     Variable v = getoperand(&cd, &ip, c);
@@ -537,12 +588,8 @@ Variable run(Code cd)
                 // look ahead
                 c = cd.body[ip++];
                 if (c == '"') {
-                    var[x - 'a'].s = readstr(&cd, &ip);
-                    int len = strlen(var[x - 'a'].s);
-                    char *str = malloc((len + 1)*sizeof(char));
-                    strcpy(str, var[x - 'a'].s);
-                    var[x - 'a'].s = str;
-                    var[x - 'a'].type = vstring;
+                    ip--;
+                    var[x - 'a'] = getconst_unchecked(&cd, &ip);
                 } else {
                     Variable v = getoperand(&cd, &ip, c);
                     if (vstring != v.type) {
@@ -562,7 +609,8 @@ Variable run(Code cd)
                 // look ahead
                 c = cd.body[ip++];
                 if (c == '"') {
-                    var[x - 'a'].b = atoi(readstr(&cd, &ip)) ? true : false;
+                    ip--;
+                    var[x - 'a'].b = atoi(getconst_unchecked(&cd, &ip).s) ? true : false;
                     var[x - 'a'].type = vbool;
                 } else {
                     Variable v = getoperand(&cd, &ip, c);
@@ -590,7 +638,8 @@ Variable run(Code cd)
                 c = cd.body[ip++];
                 int jumpPosition;
                 if (c == '"') {
-                    jumpPosition = atoi(readstr(&cd, &ip));
+                    ip--;
+                    jumpPosition = atoi(getconst_unchecked(&cd, &ip).s);
                 } else if (islower(c)) {
                     jumpPosition = cd.jumps[c - 'a'];
                 } else {
@@ -613,7 +662,8 @@ Variable run(Code cd)
                 // look ahead
                 c = cd.body[ip++];
                 if (c == '"') {
-                    jumpPosition = atoi(readstr(&cd, &ip));
+                    ip--;
+                    jumpPosition = atoi(getconst_unchecked(&cd, &ip).s);
                 } else if (islower(c)) {
                     jumpPosition = cd.jumps[c - 'a'];
                 } else {
@@ -674,7 +724,8 @@ Variable run(Code cd)
                 // look ahead
                 c = cd.body[ip++];
                 if (c == '"') {
-                    sprintf(readbuffer, "%s.skr", readstr(&cd, &ip));
+                    ip--;
+                    sprintf(readbuffer, "%s.skr", getconst_unchecked(&cd, &ip).s);
                     func[x - 'a'] = readfunction(readbuffer);
                 } else {
                     error(&cd, 2, ip-1);
@@ -687,7 +738,8 @@ Variable run(Code cd)
                 x = cd.body[ip++];
                 Variable pos;
                 if (x == '"') {
-                    pos.i = atoi(readstr(&cd, &ip));
+                    ip--;
+                    pos.i = atoi(getconst_unchecked(&cd, &ip).s);
                     pos.type = vint;
                 } else {
                     pos = getoperand(&cd, &ip, x); 
@@ -745,18 +797,40 @@ Code readfunction(char* skr_file)
         readfile(f, code->length, code->body);
         fclose(f);
 
+       code->const_list = NULL;
+
         int* jumps = (int*)malloc(26 * sizeof(int));
-        for (int i = 0; i<code->length; i++) { // jump labels
-            if (code->body[i] == 'Q') {
+        Constant *prev = NULL;
+
+        for (int i = 0; i<code->length; i++) {
+            char c = code->body[i];
+            if (c == 'Q') { // jump label
                 char j = code->body[++i];
                 if (islower(j)) {
                     jumps[j - 'a'] = i + 1;
                 } else {
                     error(code, 2, i);
                 }
+            } else if (c == '"') { // constant
+                int pos = i;
+                Variable cst = getstr(code, &i);
+                Constant *item = (Constant*)malloc(sizeof(Constant));
+                item->content = cst;
+                item->pos = pos;
+                item->resumePoint = i;
+                item->next = NULL;
+
+                if (prev == NULL) {
+                    code->const_list = item;
+                    prev = item;
+                } else {
+                    prev->next = item;
+                    prev = item;
+                }
             }
         }
         code->jumps = jumps;
+        code->curr_const = code->const_list;
 
         insert(func_map, skr_file, code);
     }

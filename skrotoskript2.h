@@ -19,19 +19,21 @@ typedef struct V {
     };
 } Variable;
 
+typedef struct O {
+    int pos;
+    int resumePoint;
+    Variable content;
+    struct O *next;
+} Constant;
+
 typedef struct C {
     int length;
     char *body;
     Variable *vars;
     struct C *funcs;
     int *jumps;
+    Constant *const_list;
+    Constant *curr_const;
 } Code;
-
-bool has_only_one_operand(char c) 
-{
-    //                     a,    b,    c,   d,    e,    f,    g,    h,    i,    j,   k,   l,    m,    n,   o,   p,   q,   r,   s,    t,    u,    v,    w,    x,    y,   z
-    bool lookup_table[] = {false,false,true,false,false,false,false,false,false,true,true,false,false,true,true,true,true,true,false,false,false,false,false,false,true,false};
-    return lookup_table[c - 'A'];
-}
 
 #endif
