@@ -17,9 +17,11 @@ Variable EMPTY;
 // Variable getoperand(Code*, int*, char);
 // Variable operation(Code*, int*, char);
 Variable getstr_unchecked(Code*, int*);
+Variable getconst_unchecked(Code*, int*);
 Variable getvar_unchecked(Code*, int*);
 Variable getoperation_unchecked(Code*, int*);
 Variable getstr(Code*, int*);
+Variable getconst(Code*, int*);
 Variable getvar(Code*, int*);
 Variable getoperation(Code*, int*);
 Variable getnext(Code*, int*);
@@ -388,6 +390,35 @@ Variable getstr(Code *cd, int *ip)
     return getstr_unchecked(cd, ip);
 }
 
+/* get constant from code */
+Variable getconst_unchecked(Code *cd, int *ip)
+{
+    Constant *temp = cd->curr_const;
+    if (temp->pos == *ip) { // const found
+        *ip = temp->resumePoint;
+        return temp->content;
+    }
+    // not found in current, iterate from start
+    temp = cd->const_list;
+    while (temp != NULL) {
+        if (temp->pos == *ip) { // const found
+            *ip = temp->resumePoint;
+            cd->curr_const = temp;
+            return temp->content;
+        }
+        temp = temp->next;
+    }
+    return EMPTY;
+}
+Variable getconst(Code *cd, int *ip)
+{
+    char c = cd->body[*ip];
+    if (c != '"') {
+        error(cd, 3, *ip);
+    }
+    return getconst_unchecked(cd, ip);
+}
+
 /* read from code a variable */
 Variable getvar_unchecked(Code *cd, int *ip)
 {
@@ -412,7 +443,7 @@ void writevar(Code *cd, int *ip, VarType type)
         return;
     }
 
-    Variable value = getoperation(cd, ip);
+    Variable value = getnext(cd, ip);
     switch (type + value.type * 5) {
         case (vnull + vnull * 5):
         case (vnull + vint * 5):
@@ -527,7 +558,7 @@ Variable getnext(Code *cd, int *ip)
     } else if (isupper(c)) {
         return getoperation_unchecked(cd, ip);
     } else if (c == '"') {
-        return getstr_unchecked(cd, ip);
+        return getconst_unchecked(cd, ip);
     } else {
         error(cd, 2, *ip);
         return EMPTY;
@@ -540,7 +571,7 @@ Variable getoperation_unchecked(Code *cd, int *ip)
     char c = cd->body[(*ip)++];
     switch (c) {
         case 'Q': // label definition (already done)
-            ip++;
+            *ip = *ip + 1;
             return EMPTY;
         case 'C': // function call
             Code f = getfunc(cd, ip);
@@ -632,9 +663,8 @@ Variable getoperation_unchecked(Code *cd, int *ip)
         case 'W': // import
             c = cd->body[(*ip)++];
             if (islower(c) == 0) error(cd, 2, (*ip)-1);
-            c = cd->body[(*ip)++];
-            if (cd->body[(*ip)++] == '"') {
-                sprintf(readbuffer, "%s.skr", readstr(cd, ip));
+            if (cd->body[*ip] == '"') {
+                sprintf(readbuffer, "%s.skr", getconst_unchecked(cd, ip).s);
                 cd->funcs[c - 'a'] = readfunction(readbuffer);
             } else {
                 error(cd, 2, (*ip)-1);
@@ -756,6 +786,7 @@ Variable run(Code cd)
     while (c != '\0' && c != 'R')
     {
         returnValue = getoperation(&cd, &ip);
+        c = cd.body[ip];
     }
     // program end
     if (c == 'R') 
@@ -794,18 +825,40 @@ Code readfunction(char* skr_file)
         readfile(f, code->length, code->body);
         fclose(f);
 
+        code->const_list = NULL;
+
         int* jumps = (int*)malloc(26 * sizeof(int));
-        for (int i = 0; i<code->length; i++) { // jump labels
-            if (code->body[i] == 'Q') {
+        Constant *prev = NULL;
+
+        for (int i = 0; i<code->length; i++) {
+            char c = code->body[i];
+            if (c == 'Q') { // jump label
                 char j = code->body[++i];
                 if (islower(j)) {
                     jumps[j - 'a'] = i + 1;
                 } else {
                     error(code, 2, i);
                 }
+            } else if (c == '"') { // constant
+                int pos = i;
+                Variable cst = getstr(code, &i);
+                Constant *item = (Constant*)malloc(sizeof(Constant));
+                item->content = cst;
+                item->pos = pos;
+                item->resumePoint = i;
+                item->next = NULL;
+
+                if (prev == NULL) {
+                    code->const_list = item;
+                    prev = item;
+                } else {
+                    prev->next = item;
+                    prev = item;
+                }
             }
         }
         code->jumps = jumps;
+        code->curr_const = code->const_list;
 
         insert(func_map, skr_file, code);
     }
