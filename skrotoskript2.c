@@ -18,6 +18,7 @@ Variable getoperand(Code*, int*, char);
 Variable operation(Code*, int*, char);
 Variable run(Code);
 Code readfunction(char*);
+Code* createfunction(char*);
 
 void error(Code *cd, int errorFlag, int line) {
     printf("\nERROR %d: ", errorFlag);
@@ -787,55 +788,63 @@ Code readfunction(char* skr_file)
         if (f == NULL) {
             error(NULL, -2, 0);
         }
-        code = (Code*)malloc(sizeof(Code));
 
         /*read file*/
         fseek(f, 0, SEEK_END);
-        code->length = ftell(f); // length
+        int len = ftell(f); // length
         rewind(f);
 
-        code->body = (char*)malloc((code->length+1) * sizeof(char)); // body
-        readfile(f, code->length, code->body);
+        char* body = (char*)malloc((len+1) * sizeof(char)); // body
+        readfile(f, len, body);
         fclose(f);
 
-       code->const_list = NULL;
-
-        int* jumps = (int*)malloc(26 * sizeof(int));
-        Constant *prev = NULL;
-
-        for (int i = 0; i<code->length; i++) {
-            char c = code->body[i];
-            if (c == 'Q') { // jump label
-                char j = code->body[++i];
-                if (islower(j)) {
-                    jumps[j - 'a'] = i + 1;
-                } else {
-                    error(code, 2, i);
-                }
-            } else if (c == '"') { // constant
-                int pos = i;
-                Variable cst = getstr(code, &i);
-                Constant *item = (Constant*)malloc(sizeof(Constant));
-                item->content = cst;
-                item->pos = pos;
-                item->resumePoint = i;
-                item->next = NULL;
-
-                if (prev == NULL) {
-                    code->const_list = item;
-                    prev = item;
-                } else {
-                    prev->next = item;
-                    prev = item;
-                }
-            }
-        }
-        code->jumps = jumps;
-        code->curr_const = code->const_list;
+        code = createfunction(body);
 
         insert(func_map, skr_file, code);
     }
     return *code;
+}
+Code* createfunction(char* program)
+{
+    Code* code = (Code*)malloc(sizeof(Code));
+    code->length = strlen(program);
+    code->body = program;
+    code->const_list = NULL;
+
+    int* jumps = (int*)malloc(26 * sizeof(int));
+    Constant *prev = NULL;
+
+    for (int i = 0; i<code->length; i++) {
+        char c = code->body[i];
+        if (c == 'Q') { // jump label
+            char j = code->body[++i];
+            if (islower(j)) {
+                jumps[j - 'a'] = i + 1;
+            } else {
+                error(code, 2, i);
+            }
+        } else if (c == '"') { // constant
+            int pos = i;
+            Variable cst = getstr(code, &i);
+            Constant *item = (Constant*)malloc(sizeof(Constant));
+            item->content = cst;
+            item->pos = pos;
+            item->resumePoint = i;
+            item->next = NULL;
+
+            if (prev == NULL) {
+                code->const_list = item;
+                prev = item;
+            } else {
+                prev->next = item;
+                prev = item;
+            }
+        }
+    }
+    code->jumps = jumps;
+    code->curr_const = code->const_list;
+
+    return code;
 }
 int main(int argc, char** args) {
     if (argc < 2) {
@@ -847,13 +856,25 @@ int main(int argc, char** args) {
 
     func_map = create_hashmap();
 
-    Code mainCode = readfunction(args[1]);
+    int argstart;
+    Code mainCode;
+
+    if (strcmp(args[1], "-c") == 0) {
+        if (argc < 3) {
+            error(NULL, -1, 0);
+        }
+        argstart = 3;
+        mainCode = *createfunction(args[2]);
+    } else {
+        argstart = 2;
+        mainCode = readfunction(args[1]);
+    }
 
     //disable buffer
     setbuf(stdout, NULL);
 
     // push args to stack
-    for (int i = 2; i < argc; i++) {
+    for (int i = argstart; i < argc; i++) {
         Variable ar;
         ar.type = vstring;
         ar.s = args[i];
