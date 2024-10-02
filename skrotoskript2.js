@@ -11,7 +11,7 @@ const rl = readline.createInterface({
 // Function to interact with the C program
 function runCProgram(input) {
     return new Promise((res) => 
-        exec(`.\\skrotoskript2.exe -c ${input.replace(/"/g, '\\"')}`, (error, stdout, stderr) => res(stdout))
+        exec(`.\\skrotoskript2.exe -c ${'"' + input.replace(/"/g, '""') + '"'}`, (error, stdout, stderr) => res(stdout))
     );
 }
 

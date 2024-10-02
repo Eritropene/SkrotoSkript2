@@ -113,7 +113,7 @@ char* readstr(Code *cd, int *ip)
 {
     char c;
     int rp = 0;
-    while((c = cd->body[(*ip)++]) != '"')
+    while((c = cd->body[(*ip)++]) != '"' && c != '\0')
     {
         readbuffer[rp++] = c;
         if (rp > MAX_STR_LEN) {
